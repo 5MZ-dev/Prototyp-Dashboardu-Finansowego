@@ -52,6 +52,13 @@ function App() {
   const [multiStockData, setMultiStockData] = useState<Record<string, StockPoint[]>>({});
   const [multiStockLoading, setMultiStockLoading] = useState(false);
   const [multiStockError, setMultiStockError] = useState<string | null>(null);
+  const [activeStockTab, setActiveStockTab] = useState<'multi' | 'comparison'>('multi');
+
+  const stockLineColors: Record<string, string> = {
+    AAPL: '#38bdf8',
+    MSFT: '#a855f7',
+    GOOGL: '#f97316',
+  };
 
   const fetchStockHistory = async (symbol: string) => {
     const response = await fetch(
@@ -159,6 +166,32 @@ function App() {
 
     loadMultiStockData();
   }, [selectedStocks]);
+
+  const comparisonData = useMemo(() => {
+    const dates = new Set<string>();
+    selectedStocks.forEach((symbol) => {
+      (multiStockData[symbol] ?? []).forEach((point) => dates.add(point.date));
+    });
+
+    const monthNames = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
+    const sortedDates = Array.from(dates).sort((a, b) => {
+      const parseDate = (str: string) => {
+        const [day, month] = str.split(' ');
+        const monthIndex = monthNames.indexOf(month.toLowerCase());
+        return new Date(2026, Math.max(0, monthIndex), Number(day)).getTime();
+      };
+      return parseDate(a) - parseDate(b);
+    });
+
+    return sortedDates.map((date) => {
+      const item: Record<string, string | number | null> = { date };
+      selectedStocks.forEach((symbol) => {
+        const point = (multiStockData[symbol] ?? []).find((stockPoint) => stockPoint.date === date);
+        item[symbol] = point?.close ?? null;
+      });
+      return item as Record<string, string | number>;
+    });
+  }, [selectedStocks, multiStockData]);
 
   const filteredProducts = useMemo(() => {
     const normalizedQuery = query.toLowerCase().trim();
@@ -320,36 +353,91 @@ function App() {
             </div>
           </div>
 
-          <div className="mt-8 rounded-[2rem] border border-slate-800/80 bg-slate-950/90 p-6">
-            {multiStockLoading ? (
-              <div className="flex h-full min-h-[260px] items-center justify-center text-slate-400">Ładowanie zestawu wykresów...</div>
+          <div className="mt-8 flex flex-col gap-4 rounded-[2rem] border border-slate-800/80 bg-slate-950/90 p-6">
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveStockTab('multi')}
+                className={`rounded-full px-5 py-3 text-sm font-medium transition ${
+                  activeStockTab === 'multi'
+                    ? 'bg-violet-500 text-white shadow-glow'
+                    : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                Indywidualne wykresy
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveStockTab('comparison')}
+                className={`rounded-full px-5 py-3 text-sm font-medium transition ${
+                  activeStockTab === 'comparison'
+                    ? 'bg-violet-500 text-white shadow-glow'
+                    : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                Wykres porównawczy
+              </button>
+            </div>
+
+            {activeStockTab === 'multi' ? (
+              multiStockLoading ? (
+                <div className="flex h-full min-h-[260px] items-center justify-center text-slate-400">Ładowanie zestawu wykresów...</div>
+              ) : multiStockError ? (
+                <div className="text-center text-rose-300">{multiStockError}</div>
+              ) : selectedStocks.length === 0 ? (
+                <div className="text-center text-slate-400">Wybierz przynajmniej jedną spółkę, aby zobaczyć wykresy.</div>
+              ) : (
+                <div className="grid gap-6 xl:grid-cols-3">
+                  {selectedStocks.map((symbol) => (
+                    <div key={symbol} className="rounded-[1.75rem] border border-slate-700/80 bg-slate-900/80 p-5 shadow-xl shadow-slate-950/20">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm uppercase tracking-[0.24em] text-violet-300/80">{symbol}</p>
+                          <h3 className="text-lg font-semibold text-white">{stockSymbols.find((item) => item.value === symbol)?.label}</h3>
+                        </div>
+                      </div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={multiStockData[symbol] ?? []} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                            <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="3 3" />
+                            <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={16} />
+                            <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} width={36} />
+                            <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 14 }} itemStyle={{ color: '#f8fafc' }} labelStyle={{ color: '#94a3b8' }} />
+                            <Line type="monotone" dataKey="close" stroke="#38bdf8" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : multiStockLoading ? (
+              <div className="flex h-full min-h-[260px] items-center justify-center text-slate-400">Ładowanie wykresu porównawczego...</div>
             ) : multiStockError ? (
               <div className="text-center text-rose-300">{multiStockError}</div>
             ) : selectedStocks.length === 0 ? (
-              <div className="text-center text-slate-400">Wybierz przynajmniej jedną spółkę, aby zobaczyć wykresy.</div>
+              <div className="text-center text-slate-400">Wybierz przynajmniej jedną spółkę, aby zobaczyć wykres porównawczy.</div>
             ) : (
-              <div className="grid gap-6 xl:grid-cols-3">
-                {selectedStocks.map((symbol) => (
-                  <div key={symbol} className="rounded-[1.75rem] border border-slate-700/80 bg-slate-900/80 p-5 shadow-xl shadow-slate-950/20">
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm uppercase tracking-[0.24em] text-violet-300/80">{symbol}</p>
-                        <h3 className="text-lg font-semibold text-white">{stockSymbols.find((item) => item.value === symbol)?.label}</h3>
-                      </div>
-                    </div>
-                    <div className="h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={multiStockData[symbol] ?? []} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                          <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="3 3" />
-                          <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={16} />
-                          <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} width={36} />
-                          <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 14 }} itemStyle={{ color: '#f8fafc' }} labelStyle={{ color: '#94a3b8' }} />
-                          <Line type="monotone" dataKey="close" stroke="#38bdf8" strokeWidth={2} dot={false} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                ))}
+              <div className="h-[420px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={comparisonData} margin={{ top: 10, right: 24, left: 0, bottom: 0 }}>
+                    <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} width={48} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 16 }} itemStyle={{ color: '#f8fafc' }} labelStyle={{ color: '#94a3b8' }} />
+                    {selectedStocks.map((symbol) => (
+                      <Line
+                        key={symbol}
+                        type="monotone"
+                        dataKey={symbol}
+                        stroke={stockLineColors[symbol] ?? '#7c3aed'}
+                        strokeWidth={3}
+                        dot={false}
+                        connectNulls
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             )}
           </div>
