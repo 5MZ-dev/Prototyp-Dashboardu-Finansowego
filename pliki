@@ -1,0 +1,10 @@
+premium-currency-dashboard/
+  app/
+    globals.css
+    layout.tsx
+    page.tsx
+  components/
+    currency-dashboard.tsx
+  lib/
+    utils.ts
+  .env.local
