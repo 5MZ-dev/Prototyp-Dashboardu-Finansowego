@@ -1,4 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 type Product = {
   id: number;
@@ -13,6 +22,17 @@ type Product = {
   };
 };
 
+type StockPoint = {
+  date: string;
+  close: number;
+};
+
+const stockSymbols = [
+  { value: 'AAPL', label: 'Apple' },
+  { value: 'MSFT', label: 'Microsoft' },
+  { value: 'GOOGL', label: 'Google' },
+];
+
 const sortOptions = [
   { value: 'asc', label: 'Cena rosnąco' },
   { value: 'desc', label: 'Cena malejąco' },
@@ -24,6 +44,10 @@ function App() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [stockSymbol, setStockSymbol] = useState(stockSymbols[0].value);
+  const [stockData, setStockData] = useState<StockPoint[]>([]);
+  const [stockLoading, setStockLoading] = useState(true);
+  const [stockError, setStockError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadProducts() {
@@ -43,6 +67,46 @@ function App() {
 
     loadProducts();
   }, []);
+
+  useEffect(() => {
+    async function loadStockData() {
+      setStockLoading(true);
+      setStockError(null);
+
+      try {
+        const response = await fetch(
+          `https://query1.finance.yahoo.com/v8/finance/chart/${stockSymbol}?range=1mo&interval=1d`,
+        );
+
+        if (!response.ok) {
+          throw new Error('Błąd pobierania danych giełdowych');
+        }
+
+        const data = await response.json();
+        const result = data.chart?.result?.[0];
+        const timestamps: number[] = result?.timestamp ?? [];
+        const closes: number[] = result?.indicators?.quote?.[0]?.close ?? [];
+
+        const points = timestamps
+          .map((timestamp, index) => ({
+            date: new Date(timestamp * 1000).toLocaleDateString('pl-PL', {
+              month: 'short',
+              day: 'numeric',
+            }),
+            close: closes[index] ?? 0,
+          }))
+          .filter((point) => point.close > 0);
+
+        setStockData(points);
+      } catch (err) {
+        setStockError((err as Error).message || 'Nieznany błąd wykresu akcji');
+      } finally {
+        setStockLoading(false);
+      }
+    }
+
+    loadStockData();
+  }, [stockSymbol]);
 
   const filteredProducts = useMemo(() => {
     const normalizedQuery = query.toLowerCase().trim();
@@ -128,6 +192,51 @@ function App() {
       </div>
 
       <main className="mx-auto max-w-7xl px-6 pb-16 lg:px-8">
+        <section className="mb-10 rounded-[2rem] border border-white/10 bg-slate-900/80 p-8 shadow-xl shadow-slate-950/20 backdrop-blur-xl">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-white">Wykres wartości akcji</h2>
+              <p className="mt-2 text-slate-400">
+                Śledź notowania najważniejszej spółki na wykresie z ostatniego miesiąca.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <label className="flex items-center gap-3 text-sm text-slate-300">
+                Symbol:
+                <select
+                  value={stockSymbol}
+                  onChange={(event) => setStockSymbol(event.target.value)}
+                  className="rounded-3xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-slate-100 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20"
+                >
+                  {stockSymbols.map((symbol) => (
+                    <option key={symbol.value} value={symbol.value}>
+                      {symbol.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div className="mt-8 min-h-[320px] rounded-[2rem] border border-slate-800/80 bg-slate-950/90 p-6">
+            {stockLoading ? (
+              <div className="flex h-full items-center justify-center text-slate-400">Ładowanie wykresu...</div>
+            ) : stockError ? (
+              <div className="text-center text-rose-300">{stockError}</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={320}>
+                <LineChart data={stockData} margin={{ top: 10, right: 24, left: 0, bottom: 0 }}>
+                  <CartesianGrid stroke="rgba(148,163,184,0.15)" strokeDasharray="3 3" />
+                  <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} width={48} />
+                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 16 }} itemStyle={{ color: '#f8fafc' }} labelStyle={{ color: '#94a3b8' }} />
+                  <Line type="monotone" dataKey="close" stroke="#7c3aed" strokeWidth={3} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </section>
+
         <section className="grid gap-8 lg:grid-cols-[1fr_0.38fr]">
           <div>
             <div className="mb-8 flex flex-wrap items-center gap-3 text-sm text-slate-400">
