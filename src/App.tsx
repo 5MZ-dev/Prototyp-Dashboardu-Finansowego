@@ -48,6 +48,34 @@ function App() {
   const [stockData, setStockData] = useState<StockPoint[]>([]);
   const [stockLoading, setStockLoading] = useState(true);
   const [stockError, setStockError] = useState<string | null>(null);
+  const [selectedStocks, setSelectedStocks] = useState<string[]>(stockSymbols.map((symbol) => symbol.value));
+  const [multiStockData, setMultiStockData] = useState<Record<string, StockPoint[]>>({});
+  const [multiStockLoading, setMultiStockLoading] = useState(false);
+  const [multiStockError, setMultiStockError] = useState<string | null>(null);
+
+  const fetchStockHistory = async (symbol: string) => {
+    const response = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1mo&interval=1d`,
+    );
+    if (!response.ok) {
+      throw new Error(`Błąd pobierania danych dla ${symbol}`);
+    }
+
+    const data = await response.json();
+    const result = data.chart?.result?.[0];
+    const timestamps: number[] = result?.timestamp ?? [];
+    const closes: number[] = result?.indicators?.quote?.[0]?.close ?? [];
+
+    return timestamps
+      .map((timestamp, index) => ({
+        date: new Date(timestamp * 1000).toLocaleDateString('pl-PL', {
+          month: 'short',
+          day: 'numeric',
+        }),
+        close: closes[index] ?? 0,
+      }))
+      .filter((point) => point.close > 0);
+  };
 
   useEffect(() => {
     async function loadProducts() {
@@ -107,6 +135,30 @@ function App() {
 
     loadStockData();
   }, [stockSymbol]);
+
+  useEffect(() => {
+    async function loadMultiStockData() {
+      if (selectedStocks.length === 0) {
+        setMultiStockData({});
+        return;
+      }
+      setMultiStockLoading(true);
+      setMultiStockError(null);
+
+      try {
+        const entries = await Promise.all(
+          selectedStocks.map(async (symbol) => [symbol, await fetchStockHistory(symbol)] as const),
+        );
+        setMultiStockData(Object.fromEntries(entries));
+      } catch (err) {
+        setMultiStockError((err as Error).message || 'Nieznany błąd wykresów zbiorowych');
+      } finally {
+        setMultiStockLoading(false);
+      }
+    }
+
+    loadMultiStockData();
+  }, [selectedStocks]);
 
   const filteredProducts = useMemo(() => {
     const normalizedQuery = query.toLowerCase().trim();
@@ -233,6 +285,72 @@ function App() {
                   <Line type="monotone" dataKey="close" stroke="#7c3aed" strokeWidth={3} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
+            )}
+          </div>
+        </section>
+
+        <section className="mb-10 rounded-[2rem] border border-white/10 bg-slate-900/80 p-8 shadow-xl shadow-slate-950/20 backdrop-blur-xl">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-white">Zestaw wykresów dla kilku spółek</h2>
+              <p className="mt-2 text-slate-400">
+                Porównaj notowania wielu firm na raz i obserwuj trendy w jednym miejscu.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {stockSymbols.map((symbol) => (
+                <label key={symbol.value} className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 transition hover:border-violet-400">
+                  <input
+                    type="checkbox"
+                    value={symbol.value}
+                    checked={selectedStocks.includes(symbol.value)}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setSelectedStocks((current) =>
+                        current.includes(value)
+                          ? current.filter((item) => item !== value)
+                          : [...current, value],
+                      );
+                    }}
+                    className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-violet-500 focus:ring-violet-400"
+                  />
+                  {symbol.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-8 rounded-[2rem] border border-slate-800/80 bg-slate-950/90 p-6">
+            {multiStockLoading ? (
+              <div className="flex h-full min-h-[260px] items-center justify-center text-slate-400">Ładowanie zestawu wykresów...</div>
+            ) : multiStockError ? (
+              <div className="text-center text-rose-300">{multiStockError}</div>
+            ) : selectedStocks.length === 0 ? (
+              <div className="text-center text-slate-400">Wybierz przynajmniej jedną spółkę, aby zobaczyć wykresy.</div>
+            ) : (
+              <div className="grid gap-6 xl:grid-cols-3">
+                {selectedStocks.map((symbol) => (
+                  <div key={symbol} className="rounded-[1.75rem] border border-slate-700/80 bg-slate-900/80 p-5 shadow-xl shadow-slate-950/20">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm uppercase tracking-[0.24em] text-violet-300/80">{symbol}</p>
+                        <h3 className="text-lg font-semibold text-white">{stockSymbols.find((item) => item.value === symbol)?.label}</h3>
+                      </div>
+                    </div>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={multiStockData[symbol] ?? []} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                          <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="3 3" />
+                          <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={16} />
+                          <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} width={36} />
+                          <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 14 }} itemStyle={{ color: '#f8fafc' }} labelStyle={{ color: '#94a3b8' }} />
+                          <Line type="monotone" dataKey="close" stroke="#38bdf8" strokeWidth={2} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </section>
