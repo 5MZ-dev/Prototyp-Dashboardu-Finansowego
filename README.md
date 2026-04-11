@@ -30,10 +30,20 @@ Projekt stworzony jako nowoczesny dashboard finansowy z użyciem React, Tailwind
 
 Repozytorium jest połączone z GitHub i zawiera workflow CI w `.github/workflows/ci.yml`, który buduje aplikację przy każdym pushu na `main`.
 
-Aby włączyć automatyczny deployment na Netlify:
+### Netlify
 
-1. Połącz repozytorium GitHub z Netlify.
+Repo jest już gotowy do Netlify dzięki plikowi `netlify.toml`.
+
+1. Połącz repozytorium z Netlify.
 2. Ustaw pole `build command` na `npm run build`.
 3. Ustaw folder publikacji na `dist`.
+4. Jeśli chcesz użyć GitHub Actions do automatycznego deployu, dodaj w repozytorium sekret `NETLIFY_AUTH_TOKEN` i `NETLIFY_SITE_ID`. Workflow znajduje się w `.github/workflows/netlify-deploy.yml`.
 
-Możesz też łatwo zaimportować repozytorium do Vercel i pozostawić domyślną konfigurację "Vite".
+### Vercel
+
+Dodałem plik `vercel.json`, więc Vercel powinien poprawnie wykryć ustawienia:
+
+- build command: `npm run build`
+- output directory: `dist`
+
+Wystarczy zaimportować repozytorium na Vercel i włączyć automatyczny deploy przy każdym commicie.
